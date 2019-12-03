@@ -1,0 +1,1310 @@
+How to build a CakePHP 3 REST API
+1. Create The Application
+
+http://www.bravo-kernel.com/2015/04/how-to-add-jwt-authentication-to-a-cakephp-3-rest-api/
+
+For this tutorial (and the follow-up posts) we will create a fresh CakePHP 3 application for our API:
+named cake3api.app
+connected to a database named cake3api_app
+Create a new project in cake php using below command 
+
+
+php composer.phar create-project --prefer-dist cakephp/app blog
+2. Add the CRUD plugin
+Add the CRUD plugin to your application 
+Run the following command inside your application’s root directory to composer install the plugin:
+1
+composer require friendsofcake/crud:^5.2.0
+Now run the following command to make your application use the plugin:
+1
+bin/cake plugin load Crud
+
+a) Expose one or more controllers
+To prepare for the follow-up tutorial we will enable the CocktailsController by using the resources() method inside the / scope definition of your config/routes.php file like this:
+ 
+
+
+
+Router::scope('/', function ($routes) {
+	$routes->resources('Cocktails');
+...
+}
+
+Configure the API
+Make the default API configuration available to all controllers in your application by replacing the content of your src/Controller/AppController.php file with:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+<?php
+namespace App\Controller;
+
+use Cake\Controller\Controller;
+
+class AppController extends Controller {
+
+   use \Crud\Controller\ControllerTrait;
+
+   public $components = [
+       'RequestHandler',
+       'Crud.Crud' => [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ],
+           'listeners' => [
+               'Crud.Api',
+               'Crud.ApiPagination',
+               'Crud.ApiQueryLog'
+           ]
+       ]
+   ];
+}
+
+c) Optionally enable extensions
+However… we will assume you want to additionally allow access to your API resources using the .json and .xml extensions so open your config/routes.php file and add the following line directly above the / scope definition:
+ 
+
+
+Router::extensions(['json', 'xml']);
+
+Here the will Occur!
+That’s all, you should now be able to browse to http://cake3api.app/index.json and be presented with your API’s first JSON (error) response looking like this:
+1
+2
+3
+4
+5
+{
+   "message": "Controller class Index could not be found.",
+   "url": "\/index.json",
+   "code": 404
+}
+
+How to use a CakePHP 3 REST API
+1. Adding The Cocktails
+Download the below CakePHP database migration file to your config/Migrations directory.
+<?php
+use Phinx\Migration\AbstractMigration;
+
+class Initial extends AbstractMigration
+{
+    public function up()
+    {
+        $table = $this->table('cocktails');
+        $table
+            ->addColumn('name', 'string', [
+                'default' => null,
+                'limit' => 255,
+                'null' => false,
+            ])
+            ->addColumn('description', 'string', [
+                'default' => null,
+                'limit' => 255,
+                'null' => false,
+            ])
+            ->addColumn('created', 'datetime', [
+                'default' => 'CURRENT_TIMESTAMP',
+                'limit' => null,
+                'null' => false,
+            ])
+            ->addColumn('modified', 'datetime', [
+                'default' => null,
+                'limit' => null,
+                'null' => true,
+            ])
+            ->create();
+
+        $this->execute(
+            "INSERT INTO `cocktails` VALUES " .
+            "('1', 'Cosmopolitan', 'Vodka based', '2015-04-10 15:56:23', null)," .
+            "('2', 'Margarita', 'Tequila based', '2015-04-10 15:59:39', null)," .
+            "('3', 'Mojito', 'Rum based', '2015-04-11 09:52:01', null)," .
+            "('4', 'Cuba Libre', 'Rum based', '2015-04-11 09:52:01', null)," .
+            "('5', 'Caipirinha', 'Rum based', '2015-04-11 09:33:37', null)," .
+            "('6', 'Tequila Sunrise', 'Tequila based', '2015-04-11 09:52:02', null)," .
+            "('7', 'Bloody Mary', 'Vodka based', '2015-04-11 09:52:02', null)," .
+            "('8', 'Black Velvet', 'Beer based', '2015-04-11 09:52:02', null)," .
+            "('9', 'Martini', 'Gin based', '2015-04-11 09:52:02', null)," .
+            "('10', 'Manhattan', 'Whiskey based', '2015-04-11 09:52:03', null)," .
+            "('11', 'Bronx', 'Gin based', '2015-04-11 09:52:03', null)," .
+            "('12', 'Rose', 'Gin bassed', '2015-04-11 09:52:03', null)," .
+            "('13', 'Hot Shot', 'Coffee based', '2015-04-11 09:52:03', null)," .
+            "('14', 'Parrot', 'Tequila based', '2015-04-11 09:52:03', null)," .
+            "('15', 'Boxer', 'Whiskey based', '2015-04-11 09:52:03', null)," .
+            "('16', 'Monkey', 'Cointreau based', '2015-04-11 09:52:03', null)," .
+            "('17', 'Pink Panther', 'Cointreau based', '2015-04-11 09:52:03', null)," .
+            "('18', 'Zombie', 'Rum based', '2015-04-11 09:52:03', null)," .
+            "('19', 'Matador', 'Tequila based', '2015-04-11 09:52:03', null)," .
+            "('20', 'B52', 'Cream based', '2015-04-11 09:52:03', null)," .
+            "('21', 'Beach Runner', 'Gin based', '2015-04-11 09:52:03', null)"
+        );
+    }
+
+    public function down()
+    {
+        $this->dropTable('cocktails');
+    }
+}
+Now run the following command inside your application’s root directory to create and populate the cocktails table:
+
+
+
+bin/cake migrations migrate
+Create the controller
+Create a new file named src/Controller/CocktailsController.php with the following content:
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+<?php
+namespace App\Controller;
+
+use App\Controller\AppController;
+
+class CocktailsController extends AppController
+{
+   public $paginate = [
+       'page' => 1,
+       'limit' => 10,
+       'maxLimit' => 100,
+       'fields' => [
+           'id', 'name', 'description'
+       ],
+       'sortWhitelist' => [
+           'id', 'name', 'description'
+       ]
+   ];
+}
+Generate the entity and table
+Generate the required entity and model by running the following command inside your application’s root directory:
+
+
+bin/cake bake model Cocktails
+Create html views
+Even though your API does not need/use views to output JSON and XML (that part is handled for you by the CRUD plugin) we will still generate some html views for easy browsing the cocktails and to prepare for the follow-up tutorials.
+Generate the views by by running the following command inside your application’s root directory:
+
+
+bin/cake bake template Cocktails
+If things went well browsing to http://cake3api.app/cocktails should display something similar to:
+
+
+
+2. Accessing API Resources
+Your API supports accessing resources with or without extensions and we will test both where applicable.
+Using Post Postman,  ARC, RESTClient tec.
+ 
+Index action (GET)
+Retrieve the first JSON page with cocktails from your API by either:
+retrieving directly from http://cake3api.app/cocktails.json
+querying http://cake3api.app/cocktails using:
+HTTP Method GET
+Accept Header application/json
+
+
+
+Should return Status Code 200 (Success) with a JSON response body similar to:
+ 
+
+
+
+{
+   "success": true,
+   "data": [
+       {
+           "id": 1,
+           "name": "Cosmopolitan",
+           "description": "Vodka based"
+       },
+       {
+           "id": 2,
+           "name": "Margarita",
+           "description": "Tequila based"
+       },
+       {
+           "id": 3,
+           "name": "Mojito",
+           "description": "Rum based"
+       }
+   ],
+   "pagination": {
+       "page_count": 5,
+       "current_page": 1,
+       "has_next_page": true,
+       "has_prev_page": false,
+       "count": 21,
+       "limit": null
+   }
+}
+View action (GET)
+Specify a record id to retrieve JSON details for a single cocktail by either:
+retrieving directly from e.g. http://cake3api.app/cocktails/5.json
+querying http://cake3api.app/cocktails/5 using:
+HTTP Method GET
+Accept Header application/json
+Should return Status Code 200 (Success) with a JSON response body similar to:
+
+
+{
+   "success": true,
+   "data": {
+       "id": 5,
+       "name": "Caipirinha",
+       "description": "Rum based",
+       "created": "2015-04-11T09:33:37+0000",
+       "modified": null
+   }
+}
+Add action (POST)
+Create a new cocktail record by posting JSON data to your API using:
+The index URL http://cake3api.app/cocktails
+HTTP Method POST
+Accept Header application/json
+Content-Type Header application/json
+Body data in (absolutely) correct JSON format
+
+
+Should return Status Code 201 (Created) with a JSON response body containing the id of the created cocktail similar to:
+
+
+{
+   "success": true,
+   "data": {
+       "id": 22
+   }
+}
+Edit/Update action (PUT)
+Change an existing cocktail by posting JSON data to our API using:
+The view URL for the specific recipe, e.g. http://cake3api.app/cocktails/5
+HTTP Method PUT
+Accept Header application/json
+Content-Type Header application/json
+Partial or full body data in (absolutely) correct JSON format
+
+Should return Status Code 200 (Success) with a JSON response body similar to:
+
+
+{
+   "success": true,
+   "data": []
+}
+Delete action (DELETE)
+Delete an existing cocktail through your API by using:
+The view URL for the specific cocktail, e.g. http://cake3api.app/cocktails/5
+HTTP Method DELETE
+Accept Header application/json
+
+Should return Status Code 200 (Success) on success with a JSON response body similar to:
+1
+2
+{
+   "success": true,
+   "data": []
+}
+3. Configuring Pagination
+The Paginator settings in src/Controller/CocktailsController.php are used by your API to format the outputted JSON/XML. Let’s change some of the settings below in preparation for querystring parameter testing.
+1
+2
+3
+4
+5
+6
+public $paginate = [
+   'page' => 1,
+   'limit' => 10,
+   'maxLimit' => 100,
+   'fields' => [
+       'id', 'name', 'description'
+   ],
+   'sortWhitelist' => [
+       'id', 'name', 'description'
+   ]
+];
+Show all cocktail details/fields
+To show all record details completely remove the fields array (used earlier to keep the JSON output examples readable).
+Querying http://cake3api.app/cocktails.json?limit=2 should now produce more detailed JSON similar to:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+{
+   "success": true,
+   "data": [
+       {
+           "id": 1,
+           "name": "Cosmopolitan",
+           "description": "Vodka based",
+           "created": "2015-04-10T15:56:23+0000",
+           "modified": null
+       },
+       {
+           "id": 2,
+           "name": "Margarita",
+           "description": "Tequila based",
+           "created": "2015-04-10T15:59:39+0000",
+           "modified": null
+       }
+   ],
+   "pagination": {
+       "page_count": 11,
+       "current_page": 1,
+       "has_next_page": true,
+       "has_prev_page": false,
+       "count": 21,
+       "limit": 2
+   }
+}
+Show less cocktails per page
+To show only show 5 cocktails per page change limit => 10 to limit => 5.
+Set maximum number of cocktails per page
+To never show more than 15 cocktails change 'maxLimit' => 100 to 'maxLimit' => 15.
+Prevent sorting by description
+To prevent users from sorting by the description field remove description from the sortWhitelist array.
+Default page
+Do NOT change the default page used for the index resultset to prevent frustrating further tests.
+4. Testing Querystring Parameters
+Your API comes with support for querystring parameters that clients can use to manipulate the output produced by your API.
+Limiting results
+Clients can use the limit parameter to manipulate the number of records returned by your API.
+To verify the parameter works as expected query http://cake3api.app/cocktails.json?limit=3.
+The result should list three cocktails instead of (the now default) five.
+Rate limiting
+To verify your API is respecting the maxLimit Paginator setting query http://cake3api.app/cocktails.json?limit=20.
+The result should only list 15 cocktails.
+Sorting by field
+Clients can use the sort parameter to specify which field should be used to sort the results produced by your API.
+To verify the parameter is working as expected query http://cake3api.app/cocktails.json?sort=name.
+The results should be sorted by cocktail name.
+Sorting ascending/descending
+Clients can use the direction parameter in combination with the sort parameter to specify the direction in which results are sorted by your API (either asc or desc).
+To verify the parameter is working as expected query http://cake3api.app/cocktails.json?sort=name&direction=desc.
+The results should be reverse-sorted by cocktail name.
+Sort whitelist
+To verify your API is respecting the sortWhitelist Paginator setting query http://cake3api.app/cocktails.json?sort=description.
+The result should show the default (non-sorted) index results since we removed description from the sortWhitelist array.
+How to prefix route a CAKEPHP 3 REST API
+Creating the Prefix Route
+1. Remove previous routing
+Remove the general API routing created in the previous tutorial by removing these lines from your config/routes.php file:
+1
+Router::extensions(['json', 'xml']);
+
+1
+$routes->resources('Cocktails');
+2. Create the prefix route
+Now create a new /api prefixed route we will use for all of our API resources by adding the following code directly above the / scope definition in your config/routes.php file:
+1
+2
+Router::prefix('api', function ($routes) {
+   $routes->extensions(['json', 'xml']);
+   $routes->resources('Cocktails');
+});
+Please note that once again:
+enabling extensions is optional
+only explicitely specified controllers will be accessible through your API
+
+3. Create the prefix AppController
+Create a new file named src/Controller/Api/AppController.php with the following content:
+
+<?php
+namespace App\Controller\Api;
+
+use Cake\Controller\Controller;
+use Cake\Event\Event;
+
+class AppController extends Controller
+{
+   use \Crud\Controller\ControllerTrait;
+
+   public $components = [
+       'RequestHandler',
+       'Crud.Crud' => [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ],
+           'listeners' => [
+               'Crud.Api',
+               'Crud.ApiPagination',
+               'Crud.ApiQueryLog'
+           ]
+       ]
+   ];
+}
+Create the CocktailsController
+Now create a new controller file for your cocktail resources named src/Controller/Api/CocktailsController.php with the same content as used in the previous tutorial but this time:
+using the Api sub-namespace matching our prefix route
+extending App\Controller\Api\AppController
+
+
+
+<?php
+namespace App\Controller\Api;
+
+use App\Controller\Api\AppController;
+
+class CocktailsController extends AppController
+{
+   public $paginate = [
+       'page' => 1,
+       'limit' => 5,
+       'maxLimit' => 15,
+       'sortWhitelist' => [
+           'id', 'name'
+       ]
+   ];
+}
+5. Cleanup
+Even though this is optional we will remove all CRUD Api configuration fromsrc/Controller/AppController.php to prove that only controller logic in the Api namespace is being used when we test the prefix.
+
+
+<?php
+namespace App\Controller;
+
+use Cake\Controller\Controller;
+
+class AppController extends Controller {
+
+   use \Crud\Controller\ControllerTrait;
+
+   public $components = [
+       'Crud.Crud' => [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ]
+       ]
+   ];
+}
+Testing the Routes
+1. Test API access
+If things went well you should now be able to access your cocktail API resources using the /api prefix route.
+To verify query http://cake3api.app/api/cocktails.json which should produce the familiar JSON response:
+
+
+{
+   "success": true,
+   "data": [
+       {
+           "id": 1,
+           "name": "Cosmopolitan",
+           "description": "Vodka based"
+       },
+       {
+           "id": 2,
+           "name": "Margarita",
+           "description": "Tequila based"
+       },
+       {
+           "id": 3,
+           "name": "Mojito",
+           "description": "Rum based"
+       }
+   ],
+   "pagination": {
+       "page_count": 5,
+       "current_page": 1,
+       "has_next_page": true,
+       "has_prev_page": false,
+       "count": 21,
+       "limit": null
+   }
+}
+ 
+2. Test API access restrictions
+If things went well your API resources should no longer be accessible using the default routes.
+To verify query http://cake3api.app/cocktails.json as used in the previous tutorial. If things went will it:
+should no longer produce a JSON/XML response
+should instead show an HTML MissingController exception similar to the one below
+
+3. Test non-API access
+Even though we have restricted API access to the /api prefix all non-API requests should still function as expected.
+To verify browe to http://cake3api.app/cocktails which should still produce the familiar CakePHP index page:
+
+
+How to add JWT Authentication to a CakePHP 3 REST API
+1. Introduction
+No more need for sessions
+No more need to protect our API against Cross-Site Request Forgery (CSRF)
+Support for granular security through the use of JWT scopes
+2. Adding Users To The Application
+Populate the database
+Download this CakePHP database migration file to your config/Migrations directory.
+Now run the following command inside your application’s root directory to create the users table:
+1
+bin/cake migrations migrate
+Generate the basic controller, entity, table and views
+To prepare for testing “basic” HTML access generate the required controller, entity, table and views by running the following command inside your application’s root directory:
+1
+bin/cake bake all Users
+Configure Password Hashing
+CakePHP 3 comes with a convenient PasswordHasher that will automatically encrypt user passwords using the very strong bcrypt hashing algorithm. To enable password hashing for your application make sure to add both the class and the method shown below to src/Model/Entity/User.php:
+ 
+1
+2
+3
+use Cake\Auth\DefaultPasswordHasher;
+
+   protected function _setPassword($password)
+   {
+       return (new DefaultPasswordHasher)->hash($password);
+   }
+Verify
+If things went well you should now be able to:
+browse to http://cake3api.app/users
+create a new user
+see the created user with hashed password
+
+
+3. Adding the JWT Plugin
+Run the following command inside your application’s root directory to composer install the JwtAuth plugin:
+1
+composer require admad/cakephp-jwt-auth
+Now run the following command to make your application use the plugin:
+1
+bin/cake plugin load ADmad/JwtAuth
+
+4. Updating The Prefix Route
+The API prefix route created during the previous tutorial needs updating:
+to enable the Api\UsersController for API usage
+to connect custom action /register to standard CRUD Plugin action /add
+to automatically create routes for the non-standard /register and /token actions
+Pro tip: we connect the /register action so we can simply extend the CRUD Plugin add() method and benefit of already available logic like validation and response codes instead of having to reinvent the wheel.
+Make sure to update the api prefix route in config/routes.php to resemble:
+1
+2
+3
+4
+Router::prefix('api', function ($routes) {
+   $routes->extensions(['json', 'xml']);
+   $routes->resources('Cocktails');
+   $routes->resources('Users');
+   Router::connect('/api/users/register', ['controller' => 'Users', 'action' => 'add', 'prefix' => 'api']);
+   $routes->fallbacks('InflectedRoute');
+});
+5. Enabling JWT Authentication
+To enable JWT Authentication for all API resources extend the src/Controller/Api/AppController.php file created during the previous tutorial with the following initialize method so the file looks similar to:
+
+
+<?php
+namespace App\Controller\Api;
+
+use Cake\Controller\Controller;
+use Cake\Event\Event;
+
+class AppController extends Controller
+{
+
+   use \Crud\Controller\ControllerTrait;
+
+   public function initialize()
+   {
+       parent::initialize();
+
+       $this->loadComponent('RequestHandler');
+       $this->loadComponent('Crud.Crud', [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ],
+           'listeners' => [
+               'Crud.Api',
+               'Crud.ApiPagination',
+               'Crud.ApiQueryLog'
+           ]
+       ]);
+       $this->loadComponent('Auth', [
+           'storage' => 'Memory',
+           'authenticate' => [
+               'Form' => [
+                   'scope' => ['Users.active' => 1]
+               ],
+               'ADmad/JwtAuth.Jwt' => [
+                   'parameter' => 'token',
+                   'userModel' => 'Users',
+                   'scope' => ['Users.active' => 1],
+                   'fields' => [
+                       'username' => 'id'
+                   ],
+                   'queryDatasource' => true
+               ]
+           ],
+           'unauthorizedRedirect' => false,
+           'checkAuthIn' => 'Controller.initialize'
+       ]);
+   }
+}
+Verify Authentication Is Enabled
+To verify your API resources now actually require authentication queryhttp://cake3api.app/api/cocktails.json.
+Should return Status Code 401 (Unauthorized) with a JSON response body similar to:
+1
+2
+3
+4
+{
+   "success": false,
+   "data": {
+       "message": "You are not authorized to access that location.",
+       "url": "\/api\/cocktails.json",
+       "code": 401
+   }
+}
+6. Creating the API UsersController
+We will now create a UsersController responsible for handling all authentication in the Api namespace:
+using standard AuthComponent allow logic to allow non-authenticated access to the /add and /tokenactions
+already containing all required use statements required later on
+Create new file src/Controller/Api/UsersController with the following code:
+1
+2
+3
+4
+5
+6
+7
+8
+<?php
+namespace App\Controller\Api;
+
+use Cake\Event\Event;
+use Cake\Network\Exception\UnauthorizedException;
+use Cake\Utility\Security;
+use Firebase\JWT\JWT;
+
+class UsersController extends AppController
+{
+   public function initialize()
+   {
+       parent::initialize();
+       $this->Auth->allow(['add', 'token']);
+   }
+}
+7. Implementing API User Registration
+Create the /register action
+Because the CRUD plugin normally only returns the id of the new record we will add the JWT token to the JSON response body by extending the add() method with some custom CRUD afterSave and serialize logic.
+To implement user registration add the following add() method to src/Controller/Api/UsersController.php:
+
+
+public function add()
+{
+   $this->Crud->on('afterSave', function(Event $event) {
+       if ($event->subject->created) {
+           $this->set('data', [
+               'id' => $event->subject->entity->id,
+               'token' => JWT::encode(
+                   [
+                       'sub' => $event->subject->entity->id,
+                       'exp' =>  time() + 604800
+                   ],
+               Security::salt())
+           ]);
+           $this->Crud->action()->config('serialize.data', 'data');
+       }
+   });
+   return $this->Crud->execute();
+}
+Verify User Registration
+To verify your setup register a new user by posting JSON data to your API using:
+URL http://cake3api.app/api/users/register
+HTTP Method POST
+Accept Header application/json
+Content-Type Header application/json
+Body data in (absolutely) correct JSON format
+
+Should return Status Code 201 (Created) with a JSON response body containing the user id and JWT token similar to:
+1
+2
+3
+4
+5
+{
+   "success": true,
+   "data": {
+       "id": 2,
+       "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6Mn0.q2chPMiKRzwrO3v48fi90HyJPHDLOXtwEKr7EcU3GPk"
+   }
+}
+8. Sanity Checking JWT Tokens
+Now that you have received your first JWT token it might be a good time to verify that your token is valid by:
+browsing to http://jwt.io/
+pasting your token in the Encoded field
+replacing the secret value with the Salt value found in your config/app.php
+If things went well you should see a green success message along with the user id and JWT exp claim as stored in the token:
+
+9. Implementing JWT Token Requests
+Create the /token action
+To implement token requests add the following token() method to src/Controller/Api/UsersController.php:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+
+public function token()
+{
+   $user = $this->Auth->identify();
+   if (!$user) {
+       throw new UnauthorizedException('Invalid username or password');
+   }
+
+   $this->set([
+       'success' => true,
+       'data' => [
+           'token' => JWT::encode([
+               'sub' => $user['id'],
+               'exp' =>  time() + 604800
+           ],
+           Security::salt())
+       ],
+       '_serialize' => ['success', 'data']
+   ]);
+}
+Verify Token Request
+To verify your setup try requesting a token for the newly created user by posting JSON data to your API using:
+URL http://cake3api.app/api/users/token
+HTTP Method POST
+Accept Header application/json
+Content-Type Header application/json
+Body data with username and password in (absolutely) correct JSON format
+
+Should return Status Code 200 (Success) with a JSON response body containing only the JWT token similar to:
+1
+2
+3
+
+
+{
+   "success": true,
+   "data": {
+       "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6Mn0.q2chPMiKRzwrO3v48fi90HyJPHDLOXtwEKr7EcU3GPk"
+   }
+}
+10. Testing JWT Authentication
+The Authorization header MUST contain a Bearer Token which is part of the OAuth V2 standard and should look like:
+
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6Mn0.q2chPMiKRzwrO3v48fi90HyJPHDLOXtwEKr7EcU3GPk
+Verify Authenticated Access
+To verify successful authentication is processed as expected retrieve the list of protected cocktails from your API by using:
+URL http://cake3api.app/api/cocktails
+HTTP Method GET
+Accept Header application/json
+Authorization Header containing Bearer {YOUR-JWT-TOKEN}
+
+Should return Status Code 200 (Success) with the familiar JSON cocktails response body:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+{
+   "success": true,
+   "data": [
+       {
+           "id": 1,
+           "name": "Cosmopolitan",
+           "description": "Vodka based"
+       },
+       {
+           "id": 2,
+           "name": "Margarita",
+           "description": "Tequila based"
+       },
+       {
+           "id": 3,
+           "name": "Mojito",
+           "description": "Rum based"
+       }
+   ]
+}
+Verify Unauthenticated Access
+To verify unsuccessful authentication is processed as expected retrieve the list of protected cocktails by using the exact same query but this time removing the Authorization header.
+Should instantly return Status Code 401 (Unauthorized) with a JSON response body similar to:
+1
+2
+3
+4
+{
+   "success": false,
+   "data": {
+       "message": "You are not authorized to access that location.",
+       "url": "\/api\/cocktails.json",
+       "code": 401
+   }
+}
+
+
+To Integrate it to your frontend and fetch data from the Server TuToRial
+
+Create a cakephp project ’menu’
+
+php composer.phar create-project --prefer-dist cakephp/app menu
+ 
+Create a database table with the name of ‘items’ and following
+
+Column name should be id, name, description, cost, created and modified along with primary keys and A I.
+
+Connect database with the project by making changes in default of username = ‘root’, password = ‘’ and database = ‘cake3api_app’ section
+ 
+Then run the following command to bake 
+
+
+php bin/cake.php bake all items
+
+
+
+Install CRUD plugin 
+
+
+composer require friendsofcake/crud:^5.2.0
+ 
+Now load plugin 
+ 
+bin/cake plugin load Crud
+
+Create a folder named ‘api’ inside controller and file name ‘AppController’ with below code
+
+<?php
+namespace App\Controller\Api;
+ 
+use Cake\Controller\Controller;
+use Cake\Event\Event;
+ 
+class AppController extends Controller
+{
+ 
+   use \Crud\Controller\ControllerTrait;
+ 
+   public function beforeFilter(Event $event)
+   {
+     
+       parent::beforeFilter($event);
+       $this->response = $this->response->cors($this->request)
+       ->allowOrigin(['*'])
+       ->allowMethods(['GET', 'POST'])
+       ->allowHeaders(['X-CSRF-Token'])
+       ->allowCredentials()
+       ->exposeHeaders(['Link'])
+       ->maxAge(300)
+       ->build();
+   }
+ 
+   public function initialize()
+   {
+       parent::initialize();
+ 
+       $this->loadComponent('RequestHandler');
+       $this->loadComponent('Crud.Crud', [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ],
+           'listeners' => [
+               'Crud.Api',
+               'Crud.ApiPagination',
+               'Crud.ApiQueryLog'
+           ]
+       ]);
+           }}
+
+
+
+9. Make sure to keep the below code in AppAController.php /controller
+
+   public $components = [
+       'RequestHandler',
+       'Crud.Crud' => [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ],
+
+10. Create a file in src/controller/Api/ItemsController named ItemsController (table controller) 
+
+<?php
+namespace App\Controller\Api;
+
+use App\Controller\Api\AppController;
+
+class ItemsController extends AppController
+{
+   public $paginate = [
+       'page' => 1,
+       'limit' => 5,
+       'maxLimit' => 15,
+       'sortWhitelist' => [
+           'id', 'name'
+       ]
+   ];
+}
+
+11. Insert the items inside Router for the table
+ $routes->resources('Items');
+
+HERE
+
+Router::prefix('api', function ($routes) {
+   $routes->extensions(['json', 'xml']);
+   $routes->resources('Items');
+  // Router::connect('/api/users/register', ['controller' => 'Users', 'action' => 'add', 'prefix' => 'api']);
+   $routes->fallbacks('InflectedRoute');
+});
+
+
+User CORS to allow the access to the data from one domain to the another domain in AppController.php
+
+public function beforeFilter(Event $event)
+   {
+     
+       parent::beforeFilter($event);
+       $this->response = $this->response->cors($this->request)
+       ->allowOrigin(['*'])
+       ->allowMethods(['GET', 'POST'])
+       ->allowHeaders(['X-CSRF-Token'])
+       ->allowCredentials()
+       ->exposeHeaders(['Link'])
+       ->maxAge(300)
+       ->build();
+   }
+
+Setting Cross Origin Request Headers (CORS)
+As of 3.2 you can use the cors() method to define HTTP Access Control related headers with a fluent interface:
+$this->response = $this->response->cors($this->request)
+    ->allowOrigin(['*.cakephp.org'])
+    ->allowMethods(['GET', 'POST'])
+    ->allowHeaders(['X-CSRF-Token'])
+    ->allowCredentials()
+    ->exposeHeaders(['Link'])
+    ->maxAge(300)
+    ->build();
+ 
+CORS related headers will only be applied to the response if the following criteria are met:
+The request has an Origin header.
+The request’s Origin value matches one of the allowed Origin values.
+
+
+For CORS Add following code in AppController.php in public function.
+
+  class AppController extends Controller
+{
+ 
+   use \Crud\Controller\ControllerTrait;
+ 
+   public function beforeFilter(Event $event)
+   {
+     
+       parent::beforeFilter($event);
+       $this->response = $this->response->cors($this->request)
+       ->allowOrigin(['*'])
+       ->allowMethods(['GET', 'POST'])
+       ->allowHeaders(['X-CSRF-Token'])
+       ->allowCredentials()
+       ->exposeHeaders(['Link'])
+       ->maxAge(300)
+       ->build();
+   }
+ 
+   public function initialize()
+   {
+       parent::initialize();
+ 
+       $this->loadComponent('RequestHandler');
+       $this->loadComponent('Crud.Crud', [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ],
+           'listeners' => [
+               'Crud.Api',
+               'Crud.ApiPagination',
+               'Crud.ApiQueryLog'
+           ]
+       ]);     
+   }
+}
+
+
+
+
+
+
+
+Add below code to boostrap.php at very last.
+
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, GET, PUT, PATCH, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: *');
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    exit(0);
+}
+
+
+____________________________________________________________________________
+
+To Import SQL Files into MySQL Databases Using phpMyAdmin
+Access your database via PHPMyAdmin (Web & Classic / cPanel / Plesk / Managed WordPress).
+On the left, click the database you want to use.
+Select the Import tab.
+Click Browse, locate the SQL file on your computer, click Open, and then click Go.
+This runs the SQL file and updates the database as specified in your SQL file. It might take several minutes to restore the database.
+php composer.phar self-update
+
+
+composer.phar install
+php composer.phar install
+composer self-update
+php composer.phar update
+php bin/cake.php bake all users_statuses
+php composer.phar self-update
+composer.phar --prefer-dist
+php composer.phar update "vendor/*"
+php composer.phar --prefer-dist
+php composer.phar --prefer-source
+curl -sS https://getcomposer.org/installer | php
+php bin/cake.php bake all users
+
+php ..\composer.phar update
+php ..\composer.phar install
+Php ../composer,phar require admad/cakephp-jwt-auth
+
+In cmd
+php -r "readfile('https://getcomposer.org/installer');" | php
+Composer.phar update 
+composer install --prefer-dist
+Configure Password Hashing
+
+src/Model/Entity/User.php
+
+To enable password hashing for your application make sure to add both the class and the method shown below to src/Model/Entity/User.php
+
+use Cake\Auth\DefaultPasswordHasher;
+
+   protected function _setPassword($password)
+   {
+       return (new DefaultPasswordHasher)->hash($password);
+   }
+
+Adding the JWT Plugin
+
+Using following commands
+
+composer require admad/cakephp-jwt-auth
+
+bin\cake plugin load ADmad/JwtAuth
+
+
+Updating The Prefix Route
+Make sure to update the api prefix route in config/routes.php to resemble:
+ 
+Router::prefix('api', function ($routes) {
+   $routes->extensions(['json', 'xml']);
+   $routes->resources('Cocktails');
+   $routes->resources('Users');
+   Router::connect('/api/users/register', ['controller' => 'Users', 'action' => 'add', 'prefix' => 'api']);
+   $routes->fallbacks('InflectedRoute');
+});
+
+
+Inside resources extend the src/Controller/Api/AppController.php
+<?php
+namespace App\Controller\Api;
+
+use Cake\Controller\Controller;
+use Cake\Event\Event;
+
+class AppController extends Controller
+{
+
+   use \Crud\Controller\ControllerTrait;
+
+   public function initialize()
+   {
+       parent::initialize();
+
+       $this->loadComponent('RequestHandler');
+       $this->loadComponent('Crud.Crud', [
+           'actions' => [
+               'Crud.Index',
+               'Crud.View',
+               'Crud.Add',
+               'Crud.Edit',
+               'Crud.Delete'
+           ],
+           'listeners' => [
+               'Crud.Api',
+               'Crud.ApiPagination',
+               'Crud.ApiQueryLog'
+           ]
+       ]);
+       $this->loadComponent('Auth', [
+           'storage' => 'Memory',
+           'authenticate' => [
+               'Form' => [
+                   'scope' => ['Users.active' => 1]
+               ],
+               'ADmad/JwtAuth.Jwt' => [
+                   'parameter' => 'token',
+                   'userModel' => 'Users',
+                   'scope' => ['Users.active' => 1],
+                   'fields' => [
+                       'username' => 'id'
+                   ],
+                   'queryDatasource' => true
+               ]
+           ],
+           'unauthorizedRedirect' => false,
+           'checkAuthIn' => 'Controller.initialize'
+       ]);
+   }
+}
+6. Creating the API UsersController
+
+Place 
+
+<?php
+namespace App\Controller\Api;
+
+use Cake\Event\Event;
+use Cake\Network\Exception\UnauthorizedException;
+use Cake\Utility\Security;
+use Firebase\JWT\JWT;
+
+class UsersController extends AppController
+{
+   public function initialize()
+   {
+       parent::initialize();
+       $this->Auth->allow(['add', 'token']);
+   }
+}
+
+Actually this:
+
+use Cake\Event\Event;
+use Cake\Network\Exception\UnauthorizedException;
+use Cake\Utility\Security;
+use Firebase\JWT\JWT;
+
+class{
+public function initialize()
+   {
+       parent::initialize();
+       $this->Auth->allow(['add', 'token']);
+   }
+}
+
+ Inside src/Controller/Api/UsersController
+
+
+
+
+9. Create the /token action
+To implement token requests add the following token() method to src/Controller/Api/UsersController.php
+ 
+public function token()
+{
+   $user = $this->Auth->identify();
+   if (!$user) {
+       throw new UnauthorizedException('Invalid username or password');
+   }
+
+   $this->set([
+       'success' => true,
+       'data' => [
+           'token' => JWT::encode([
+               'sub' => $user['id'],
+               'exp' =>  time() + 604800
+           ],
+           Security::salt())
+       ],
+       '_serialize' => ['success', 'data']
+   ]);
+}
+
+ 
+10. Verify Token Request
+To verify your setup try requesting a token for the newly created user by posting JSON data to your API using:
+URL http://localhost/logistic_v1/api/users/token
+HTTP Method POST
+Accept Header application/json
+Content-Type Header application/json
+Body data with username and password in (absolutely) correct JSON format
+
+
+
+Place username and password inside body
+
+
+php composer.phar update
+
+-------------------------------------------------------
+
+Sorting
+Thread
+Interfaces
+Error
+Class
+Object
+
+
